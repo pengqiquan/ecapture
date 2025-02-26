@@ -1,20 +1,26 @@
-/*
-Copyright © 2022 CFC4N <cfc4n.cs@gmail.com>
+// Copyright 2022 CFC4N <cfc4n.cs@gmail.com>. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-*/
 package cmd
 
 import (
-	"context"
-	"ecapture/user"
+	"github.com/gojue/ecapture/user/config"
+	"github.com/gojue/ecapture/user/module"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
-var bc = user.NewBashConfig()
+var bc = config.NewBashConfig()
 
 // bashCmd represents the bash command
 var bashCmd = &cobra.Command{
@@ -28,7 +34,7 @@ Auto find the bash of the current env as the capture target.`,
 func init() {
 	bashCmd.PersistentFlags().StringVar(&bc.Bashpath, "bash", "", "$SHELL file path, eg: /bin/bash , will automatically find it from $ENV default.")
 	bashCmd.PersistentFlags().StringVar(&bc.Readline, "readlineso", "", "readline.so file path, will automatically find it from $BASH_PATH default.")
-	bashCmd.Flags().IntVarP(&bc.ErrNo, "errnumber", "e", user.BASH_ERRNO_DEFAULT, "only show the command which exec reulst equals err number.")
+	bashCmd.Flags().IntVarP(&bc.ErrNo, "errnumber", "e", module.BashErrnoDefault, "only show the command which exec reulst equals err number.")
 	rootCmd.AddCommand(bashCmd)
 
 	// Here you will define your flags and configuration settings.
@@ -44,49 +50,5 @@ func init() {
 
 // bashCommandFunc executes the "bash" command.
 func bashCommandFunc(command *cobra.Command, args []string) {
-	stopper := make(chan os.Signal, 1)
-	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
-	ctx, cancelFun := context.WithCancel(context.TODO())
-
-	mod := user.GetModuleByName(user.MODULE_NAME_BASH)
-
-	logger := log.Default()
-
-	logger.Printf("start to run %s module", mod.Name())
-
-	// save global config
-	gConf, e := getGlobalConf(command)
-	if e != nil {
-		logger.Fatal(e)
-		os.Exit(1)
-	}
-	bc.Pid = gConf.Pid
-	bc.Uid = gConf.Uid
-	bc.Debug = gConf.Debug
-	bc.IsHex = gConf.IsHex
-
-	log.Printf("pid info :%d", os.Getpid())
-	//bc.Pid = globalFlags.Pid
-	if e := bc.Check(); e != nil {
-		logger.Fatal(e)
-		os.Exit(1)
-	}
-
-	//初始化
-	err := mod.Init(ctx, logger, bc)
-	if err != nil {
-		logger.Fatal(err)
-		os.Exit(1)
-	}
-
-	// 加载ebpf，挂载到hook点上，开始监听
-	go func(module user.IModule) {
-		err := module.Run()
-		if err != nil {
-			logger.Fatalf("%v", err)
-		}
-	}(mod)
-	<-stopper
-	cancelFun()
-	os.Exit(0)
+	runModule(module.ModuleNameBash, bc)
 }

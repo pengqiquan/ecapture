@@ -1,15 +1,14 @@
 package proc
 
 import (
-	"debug/dwarf"
-	"debug/elf"
+	"debug/buildinfo"
 	"errors"
 	"strconv"
 	"strings"
 )
 
 const (
-	goVersionPrefix = "Go cmd/compile "
+	goVersionPrefix = "Go cmd/compile"
 )
 
 // ErrVersionNotFound is returned when we can't find Go version info from a binary
@@ -34,40 +33,15 @@ func (v *GoVersion) After(major, minor int) bool {
 
 // ExtraceGoVersion extracts Go version info from a binary that is built with Go toolchain
 func ExtraceGoVersion(path string) (*GoVersion, error) {
-	file, err := elf.Open(path)
+	bi, e := buildinfo.ReadFile(path)
+	if e != nil {
+		return nil, ErrVersionNotFound
+	}
+	gv, err := parseGoVersion(bi.GoVersion)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	raw, err := file.DWARF()
-	if err != nil {
-		return nil, err
-	}
-
-	reader := raw.Reader()
-	for {
-		entry, err := reader.Next()
-		if err != nil {
-			return nil, err
-		}
-
-		if entry == nil {
-			break
-		}
-
-		for _, field := range entry.Field {
-			if field.Attr == dwarf.AttrProducer {
-				val, ok := field.Val.(string)
-				if !ok {
-					continue
-				}
-				return parseGoVersion(val)
-			}
-		}
-	}
-
-	return nil, ErrVersionNotFound
+	return gv, nil
 }
 
 func parseGoVersion(r string) (*GoVersion, error) {
